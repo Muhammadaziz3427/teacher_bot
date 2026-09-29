@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from aiogram import Router
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
@@ -239,8 +241,11 @@ async def cmd_app(
     if not chats:
         await message.reply(t("app_open_off", lang))
         return
-    base = (settings.miniapp_public_url or
-            f"http://{settings.miniapp_host}:{settings.miniapp_port}").rstrip("/")
+    base = (
+        settings.miniapp_public_url
+        or os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")   # Render's own URL
+        or f"http://{settings.miniapp_host}:{settings.miniapp_port}"
+    ).rstrip("/")
     if base.startswith("http://"):
         await message.answer(t("app_open_https", lang, url=base + "/"))
         return

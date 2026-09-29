@@ -19,6 +19,7 @@ import asyncio
 import concurrent.futures
 import json
 import logging
+import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
@@ -121,6 +122,11 @@ def _make_handler(loop: asyncio.AbstractEventLoop, token: str):
             parsed = urlparse(self.path)
             query = parse_qs(parsed.query)
 
+            # Always available: Render / UptimeRobot health checks.
+            if parsed.path in ("/healthz", "/health"):
+                self._json(200, {"status": "ok", "service": "teacher-bot"})
+                return
+
             if parsed.path in ("/", "/index.html"):
                 if not INDEX_FILE.exists():
                     self._json(500, {"error": "miniapp/index.html is missing"})
@@ -198,17 +204,24 @@ class MiniApp:
 
 
 def start(loop: Optional[asyncio.AbstractEventLoop] = None) -> Optional[MiniApp]:
-    """Start the dashboard; ``None`` when it is switched off or busy."""
-    if not settings.miniapp_ready:
+    """Start the HTTP server: dashboard + ``/healthz``.
+
+    On PaaS hosts (Render, Railway, …) the platform injects ``PORT`` and the
+    service must answer there — then the server binds ``0.0.0.0:$PORT`` even
+    when the dashboard itself is off, so health checks never fail. Without
+    ``PORT`` it only starts when the Mini App is switched on.
+    """
+    env_port = os.environ.get("PORT", "").strip()
+    if not settings.miniapp_ready and not env_port:
         return None
+    host = "0.0.0.0" if env_port else settings.miniapp_host
+    port = int(env_port) if env_port else settings.miniapp_port
     server = MiniApp(
-        loop or asyncio.get_event_loop(),
-        settings.miniapp_host, settings.miniapp_port, settings.miniapp_token,
+        loop or asyncio.get_event_loop(), host, port, settings.miniapp_token
     )
     try:
         server.start()
     except OSError as exc:
-        log.warning("Mini app not started on %s:%s — %s",
-                    settings.miniapp_host, settings.miniapp_port, exc)
+        log.warning("Mini app not started on %s:%s — %s", host, port, exc)
         return None
     return server

@@ -121,6 +121,13 @@ class Settings:
     miniapp_token: str
     miniapp_public_url: str
 
+    # Ephemeral diskli hostlar (Render free) uchun bazani GitHub'da saqlash
+    db_sync_repo: str
+    db_sync_token: str
+    db_sync_branch: str
+    db_sync_path: str
+    db_sync_interval: int
+
     # --- derived -----------------------------------------------------
     @property
     def tz(self) -> ZoneInfo:
@@ -164,6 +171,12 @@ class Settings:
     @property
     def miniapp_ready(self) -> bool:
         return bool(self.miniapp_enabled and self.miniapp_token)
+
+    @property
+    def db_sync_ready(self) -> bool:
+        """True when the database is mirrored to a private GitHub repo."""
+        return bool(self.db_sync_repo and "/" in self.db_sync_repo
+                    and self.db_sync_token)
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_ids
@@ -220,6 +233,11 @@ def build_settings() -> Settings:
         miniapp_port=_int("MINIAPP_PORT", 8080),
         miniapp_token=_str("MINIAPP_TOKEN"),
         miniapp_public_url=_str("MINIAPP_PUBLIC_URL").rstrip("/"),
+        db_sync_repo=_str("DB_SYNC_REPO").strip("/"),
+        db_sync_token=_str("DB_SYNC_TOKEN"),
+        db_sync_branch=_str("DB_SYNC_BRANCH", "main"),
+        db_sync_path=_str("DB_SYNC_PATH", "teacher_bot.db.zip"),
+        db_sync_interval=_int("DB_SYNC_INTERVAL", 5),
     )
 
 

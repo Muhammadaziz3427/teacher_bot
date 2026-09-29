@@ -601,6 +601,11 @@ To'liq qo'llanma: **[`deploy/README.md`](deploy/README.md)** — GitHub Actions
 nega 24/7 uchun yaramaydi, Oracle Cloud Always Free'da bepul VM, Docker,
 systemd, zaxira va kuzatish bo'yicha qadam-baqadam ko'rsatmalar.
 
+**Render'da ishlatayotgan bo'lsangiz** → **[`deploy/render.md`](deploy/render.md)**:
+free reja (Web Service + `/healthz`), 15 daqiqalik spin-down'ni UptimeRobot
+bilan yengish, bazani **GitHub private repo'da** saqlash (`DB_SYNC_REPO`),
+Blueprint (`render.yaml`) va xatolar ro'yxati.
+
 Qisqacha eng ishonchli bepul variant — **Oracle Cloud Always Free VM + systemd**
 (`deploy/teacher-bot.service`), Docker ishlatsangiz: `docker compose up -d`
 (`restart: unless-stopped` tufayli bot o'zi qayta ko'tariladi).

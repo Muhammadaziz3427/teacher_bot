@@ -13,6 +13,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import select
 
 from .config import settings
+from . import db_sync
 from .db import session_scope
 from .models import Chat, Homework
 from .services import homework as homework_service
@@ -229,6 +230,18 @@ async def auto_tests_job(bot: Bot) -> None:
                 log.exception("Auto test failed for chat %s", chat.id)
 
 
+async def db_sync_job(bot: Bot) -> None:
+    """Ephemeral host (Render free): mirror the DB to the private GitHub repo.
+
+    The job itself checks whether the database actually changed, so quiet
+    periods cost no API calls and no history in the mirror repository.
+    """
+    try:
+        await db_sync.push_async()
+    except Exception:
+        log.exception("Database sync to GitHub failed")
+
+
 def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=settings.tz)
     scheduler.add_job(
@@ -281,7 +294,17 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
             max_instances=1,
             coalesce=True,
         )
+    if settings.db_sync_ready:
+        scheduler.add_job(
+            db_sync_job,
+            IntervalTrigger(minutes=max(1, settings.db_sync_interval)),
+            args=[bot],
+            id="db-sync",
+            max_instances=1,
+            coalesce=True,
+        )
     scheduler.start()
-    log.info("Scheduler started (%s zones, weekly=%s)", settings.tz_name,
-             settings.auto_weekly_report)
+    log.info("Scheduler started (%s zones, weekly=%s, db_sync=%s)",
+             settings.tz_name, settings.auto_weekly_report,
+             settings.db_sync_ready)
     return scheduler

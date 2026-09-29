@@ -14,6 +14,7 @@ from . import __version__
 from .ai_worker import setup_worker
 from .config import settings
 from .db import dispose, init_db
+from . import db_sync
 from .handlers import register_handlers
 from .logging_setup import setup_logging
 from .middlewares import AppContextMiddleware
@@ -47,6 +48,20 @@ async def run() -> None:
             "BOT_TOKEN is missing.\n"
             "Copy .env.example to .env and put your @BotFather token in it."
         )
+    # Ephemeral disk (Render free): restore the database from GitHub first.
+    # If it cannot be fetched we must NOT continue with an empty database —
+    # the first push would overwrite every student's record on the remote.
+    try:
+        if await db_sync.pull_async():
+            log.info("Database restored from %s", settings.db_sync_repo)
+    except Exception:
+        if not settings.db_path.exists():
+            raise SystemExit(
+                "DB sync pull failed and there is no local database — "
+                "refusing to start with an empty one."
+            )
+        log.exception("DB sync pull failed; using the local database")
+
     await init_db()
     bot = build_bot()
     dp = build_dispatcher()
@@ -79,6 +94,11 @@ async def run() -> None:
                 miniapp.stop()
             except Exception:
                 log.exception("Mini app failed to stop")
+        try:
+            if await db_sync.push_async(force=True):
+                log.info("Database saved to GitHub on shutdown")
+        except Exception:
+            log.exception("Database save on shutdown failed")
         await bot.session.close()
         await dispose()
 

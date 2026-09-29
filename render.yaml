@@ -1,0 +1,40 @@
+# Render uchun blueprint: Dashboard → New → Blueprint → bu repo'ni tanlang.
+# Sirlangan qiymatlar (sync: false) deploy'dan keyin Environment'da to'ldiriladi.
+services:
+  - type: web
+    name: teacher-bot
+    runtime: python
+    plan: free                 # 0.1 CPU / 512 MB, 15 daqiqada spin-down
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run.py
+    healthCheckPath: /healthz  # app/miniapp.py dagi endpoint
+    autoDeploy: true           # GitHub'ga push = avtomatik deploy
+    envVars:
+      # --- to'ldirishingiz kerak (Dashboard → Environment) ---
+      - key: BOT_TOKEN
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: ADMIN_IDS
+        sync: false
+      - key: TEACHER_IDS
+        sync: false
+      - key: DB_SYNC_REPO
+        sync: false            # masalan: Muhammadaziz3427/teacher_bot_data (PRIVATE!)
+      - key: DB_SYNC_TOKEN
+        sync: false            # GitHub PAT (Contents: read/write)
+      # --- tayyor qiymatlar ---
+      - key: TZ
+        value: Asia/Tashkent
+      - key: DB_FILE
+        value: data/teacher_bot.db
+      - key: EXPORTS_DIR
+        value: data/exports
+      - key: MINIAPP_ENABLED
+        value: "true"
+      - key: MINIAPP_TOKEN
+        generateValue: true    # Render tasodifiy yaratadi — saqlab qo'ying
+      - key: CONFIRM_SUBMISSIONS
+        value: "false"

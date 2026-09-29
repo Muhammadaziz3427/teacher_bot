@@ -843,6 +843,9 @@ async def _after_session(bot: DummyBot, hw1_id: int, hw2_id: int, sub1, points1)
                                   port, MINI_TOKEN)
     mini.start()
     try:
+        code, body = await _http("/healthz")
+        check("health endpoint answers for Render / uptime pings",
+              code == 200 and b'"ok"' in body, str(code))
         code, body = await _http("/")
         check("mini app serves its dashboard page",
               code == 200 and b"Students this week" in body, str(code))
