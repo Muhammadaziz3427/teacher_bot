@@ -505,23 +505,28 @@ Excel faylini yaratib tekshiradi va oxirida:
 OK  All checks passed — the whole pipeline works offline.
 ```
 
-### 🧪 Unit testlar (pytest)
+### 🧪 Unit testlar (pytest + node)
 
 ```powershell
 pip install -r requirements-dev.txt
-python -m pytest
+python -m pytest                          # 67 test
+node tests/miniapp_page.test.js           # dashboard sahifasi (9 check)
 ```
 
-50 ta tez test: muddat parseri, ball qoidalari, AI normallashtirish
-(score↔verdict, severity, retry), 3 tilning to'liqligi va **haqiqiy SQLite**
-da topshirish tsikli (qayta yuborish → yangi attempt). Testlar alohida
+**67 ta Python testi**: muddat parseri, ball qoidalari, AI normallashtirish
+(score↔verdict, severity, retry), 3 tilning to'liqligi, baza sinxronizatsiyasi
+(`db_sync`) va **haqiqiy SQLite** da topshirish tsikli. Testlar alohida
 `data/pytest.db` foydalanadi — ishlab turgan bazaga **tegmaydi**.
+
+**9 ta node testi**: `miniapp/index.html` ichidagi JS'ni soxta DOM'da
+ishga tushirib tekshiradi — guruh tanlagich, HTML escaping, kartalar,
+chat ID yo'qolishi va `401` xabari. Brauzersiz ishlaydi.
 
 Xatolarni ko'rish uchun: `python -m pytest -v` yoki bitta fayl:
 `python -m pytest tests/test_scoring.py -v`.
 
 CI (GitHub Actions) `.github/workflows/ci.yml` da har push'da `pytest` +
-`selftest.py` ni ishga tushiradi.
+`node` sahifa testi + `selftest.py` ni ishga tushiradi.
 
 ### 📜 Loglar
 
@@ -555,6 +560,11 @@ npx localtunnel --port 8080
 
 Panelga brauzerdan ham kirish mumkin: `http://127.0.0.1:8080/?chat=<guruh_id>&token=<MINIAPP_TOKEN>`
 (`/api/summary` esa token bo'lmasa `401` qaytaradi).
+
+**Chat ID'siz ham ishlaydi** (BotFather "Menu Button" uchun qulay):
+`https://<manzil>/?token=<MINIAPP_TOKEN>` — sahifa **guruhlar ro'yxatini**
+ko'rsatadi (o'quvchi soni va faol vazifalar bilan), bosilganda o'sha
+guruhning haftalik paneli ochiladi.
 
 ---
 

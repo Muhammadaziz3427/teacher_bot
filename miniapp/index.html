@@ -40,6 +40,7 @@
   .bar > i { display: block; height: 100%; background: var(--button); }
   .pill { display: inline-block; padding: 2px 8px; border-radius: 20px;
           background: var(--button); color: #fff; font-size: 12px; }
+  .grp { color: var(--button); font-weight: 600; text-decoration: none; }
   .empty { color: var(--hint); font-size: 13px; }
   .err { color: #ff6b6b; }
   footer { margin-top: 16px; color: var(--hint); font-size: 12px; text-align: center; }
@@ -79,16 +80,62 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const bar = (value) => `<div class="bar"><i style="width:${Math.max(0, Math.min(100, value))}%"></i></div>`;
 
+function failure(status) {
+  if (status === 401) {
+    return "401 — MINIAPP_TOKEN is not set (or is different) on the server. "
+      + "Set it in Render → Environment, then open /?token=<MINIAPP_TOKEN>";
+  }
+  if (status === 400) return "400 — this link is missing the group id (?chat=…)";
+  return "HTTP " + status;
+}
+
+function showError(message) {
+  $("rows").innerHTML = `<tr><td colspan="5" class="err">${esc(message)}</td></tr>`;
+  $("hw").innerHTML = "";
+  $("cards").innerHTML = "";
+}
+
 async function load() {
   try {
     const res = await fetch(`/api/summary?chat=${encodeURIComponent(chat)}&token=${encodeURIComponent(token)}`);
-    if (!res.ok) throw new Error("HTTP " + res.status);
+    if (!res.ok) throw new Error(failure(res.status));
     render(await res.json());
   } catch (e) {
-    $("rows").innerHTML = `<tr><td colspan="5" class="err">Could not load data: ${esc(e.message)}</td></tr>`;
-    $("hw").innerHTML = "";
-    $("cards").innerHTML = "";
+    showError("Could not load data: " + e.message);
   }
+}
+
+// No ?chat= → this is the bare URL / BotFather menu button: list the groups.
+async function loadGroups() {
+  try {
+    const res = await fetch(`/api/groups?token=${encodeURIComponent(token)}`);
+    if (!res.ok) throw new Error(failure(res.status));
+    const data = await res.json();
+    renderGroups(data.groups || []);
+  } catch (e) {
+    $("title").textContent = "Class dashboard";
+    $("period").textContent = "could not load the group list";
+    showError(e.message);
+  }
+}
+
+function renderGroups(groups) {
+  $("title").textContent = "Guruhlar / Groups";
+  $("period").textContent = "Guruhni tanlang — haftalik panel ochiladi";
+  $("cards").innerHTML =
+    `<div class="card"><b>${groups.length}</b><span>groups</span></div>`;
+  $("hw").innerHTML = "";
+  $("rows").innerHTML = groups.length
+    ? groups.map((g) => `
+        <tr>
+          <td>🏫</td>
+          <td>
+            <a class="grp" href="?chat=${g.id}&token=${encodeURIComponent(token)}">${esc(g.title)}</a>
+            <div class="empty">${esc(g.students)} students · ${esc(g.active_homeworks)} active homework</div>
+          </td>
+          <td colspan="3"></td>
+        </tr>`).join("")
+    : `<tr><td colspan="5" class="empty">Guruh topilmadi — botni guruhga qo'shib, guruhda /start yozing.</td></tr>`;
 }
 
 function render(d) {
@@ -125,8 +172,12 @@ function render(d) {
     : `<div class="empty">No active homework.</div>`;
 }
 
-load();
-setInterval(load, 60000);
+if (chat) {
+  load();
+  setInterval(load, 60000);
+} else {
+  loadGroups();          // bare URL or the BotFather menu button
+}
 </script>
 </body>
 </html>

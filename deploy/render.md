@@ -164,3 +164,26 @@ yetarli. Lekin **asosiy sinf uchun** javobgarlikni oshirmaslik uchun:
 Ko'p guruh/jiddiy ish uchun avvalgi qo'llanmaga qarang:
 [`deploy/README.md`](README.md) (Oracle Cloud — muddatsiz bepul, diskli,
 hech qanday ping'siz).
+
+---
+
+## 9) 🤖 BotFather sozlamalari
+
+BotFather → `/mybots` → botni tanlang:
+
+| Sozlama | Qiymat / nima qilinadi |
+|---|---|
+| **Bot Settings → Menu Button** | URL: `https://<sizning-manzil>.onrender.com/?token=<MINIAPP_TOKEN>` — **chat id shart emas**, sahifa guruhlar ro'yxatini ko'rsatadi (shu sababli "picker" qo'shildi) |
+| **Bot Settings → Group Privacy** | **Turn off (Disable)** — bot guruhdagi rasm va xabarlarni ko'rishi uchun (aks holda vazifa tekshirilmaydi) |
+| **Bot Settings → Allow Groups?** | **Enable** — botni guruhga qo'sha olish uchun |
+| `/setjoingroups` | Enable |
+| `/setprivacy` | Disable |
+| `/newapp` *(ixtiyoriy)* | Ilovaga nom, qisqa nom, tavsif va rasm beradi; chat ichidagi tugma matni "Open" bo'ladi |
+| `/setdescription`, `/setabouttext`, `/setuserpic` | Chiroyli profil (ixtiyoriy) |
+
+> Menu Button URL'da **token** bor — begonaga yubormang. `MINIAPP_TOKEN`
+> o'zgarsa, BotFather'dagi URL'ni ham yangilang.
+
+**Nima beradi?** Telegram'da chat ichida pastdagi "Open" tugmasi — bosilganda
+panel ochiladi (chat ID kerak emas → guruh tanlash sahifasi chiqadi).
+

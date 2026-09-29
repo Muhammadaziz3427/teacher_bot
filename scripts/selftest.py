@@ -858,6 +858,14 @@ async def _after_session(bot: DummyBot, hw1_id: int, hw2_id: int, sub1, points1)
         check("summary API returns the weekly numbers",
               code == 200 and payload.get("totals", {}).get("students", 0) > 0,
               str(code))
+        code, body = await _http(f"/api/groups?token={MINI_TOKEN}")
+        listing = json.loads(body) if code == 200 else {}
+        check("group picker list is served (bare URL / menu button)",
+              code == 200 and any(g["id"] == CHAT_ID
+                                  for g in listing.get("groups", [])),
+              str(code))
+        code, _body = await _http("/api/groups?token=wrong")
+        check("group picker is token guarded", code == 401, str(code))
         code, _body = await _http(f"/api/nope?token={MINI_TOKEN}")
         check("unknown API paths are 404", code == 404, str(code))
     finally:

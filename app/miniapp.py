@@ -98,6 +98,26 @@ async def _summary_for_chat(chat_id: int) -> dict[str, Any]:
         return await summary(session, chat_id)
 
 
+async def _groups() -> dict[str, Any]:
+    """Every class group — powers the picker on the bare URL / menu button."""
+    from sqlalchemy import select
+
+    from .db import SessionLocal
+
+    async with SessionLocal() as session:
+        rows = (await session.execute(select(Chat))).scalars().all()
+        groups = []
+        for chat in rows:
+            groups.append({
+                "id": int(chat.id),
+                "title": chat.title or str(chat.id),
+                "students": await student_service.count_students(session, chat.id),
+                "active_homeworks":
+                    await homework_service.count_active(session, chat.id),
+            })
+    return {"groups": groups}
+
+
 def _make_handler(loop: asyncio.AbstractEventLoop, token: str):
     class Handler(BaseHTTPRequestHandler):
         server_version = "TeacherBotMini/1.0"
@@ -127,6 +147,55 @@ def _make_handler(loop: asyncio.AbstractEventLoop, token: str):
                 self._json(200, {"status": "ok", "service": "teacher-bot"})
                 return
 
+            # --- token-protected JSON API ---------------------------------
+            if parsed.path.startswith("/api/"):
+                given = (query.get("token", [""])[0]
+                         or self.headers.get("X-Auth-Token", "")).strip()
+                if not token or given != token:
+                    self._json(401, {
+                        "error": "bad token",
+                        "hint": "open /?chat=<chat_id>&token=<MINIAPP_TOKEN> "
+                                "or set MINIAPP_TOKEN in the service environment",
+                    })
+                    return
+
+                coroutine: Any
+                label = ""
+                if parsed.path == "/api/groups":
+                    coroutine, label = _groups(), "groups"
+                elif parsed.path == "/api/summary":
+                    try:
+                        chat_id = int(query.get("chat", [""])[0])
+                    except ValueError:
+                        self._json(400, {"error": "chat id is required"})
+                        return
+                    coroutine, label = _summary_for_chat(chat_id), "summary"
+                else:
+                    self._json(404, {"error": "not found"})
+                    return
+
+                try:
+                    data = asyncio.run_coroutine_threadsafe(
+                        coroutine, loop
+                    ).result(timeout=15)
+                except _Cancelled:
+                    # the server is stopping: any half-finished handler is dropped
+                    return
+                except concurrent.futures.TimeoutError:
+                    log.warning("Mini app request timed out (%s)", label)
+                    self._json(504, {"error": "the bot is busy, try again"})
+                    return
+                except Exception:
+                    log.exception("Mini app request failed (%s)", label)
+                    self._json(500, {"error": "database error"})
+                    return
+                try:
+                    self._json(200, data)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+                return
+
+            # --- the page -------------------------------------------------
             if parsed.path in ("/", "/index.html"):
                 if not INDEX_FILE.exists():
                     self._json(500, {"error": "miniapp/index.html is missing"})
@@ -134,42 +203,7 @@ def _make_handler(loop: asyncio.AbstractEventLoop, token: str):
                 self._send(200, INDEX_FILE.read_bytes(), "text/html; charset=utf-8")
                 return
 
-            if parsed.path != "/api/summary":
-                self._json(404, {"error": "not found"})
-                return
-
-            given = (query.get("token", [""])[0]
-                     or self.headers.get("X-Auth-Token", "")).strip()
-            if not token or given != token:
-                self._json(401, {"error": "bad token"})
-                return
-
-            try:
-                chat_id = int(query.get("chat", [""])[0])
-            except ValueError:
-                self._json(400, {"error": "chat id is required"})
-                return
-
-            try:
-                future = asyncio.run_coroutine_threadsafe(
-                    _summary_for_chat(chat_id), loop
-                )
-                data = future.result(timeout=15)
-            except _Cancelled:
-                # the server is stopping: any half-finished handler is dropped
-                return
-            except concurrent.futures.TimeoutError:
-                log.warning("Mini app request timed out for chat %s", chat_id)
-                self._json(504, {"error": "the bot is busy, try again"})
-                return
-            except Exception:
-                log.exception("Mini app request failed for chat %s", chat_id)
-                self._json(500, {"error": "database error"})
-                return
-            try:
-                self._json(200, data)
-            except (BrokenPipeError, ConnectionResetError):
-                pass
+            self._json(404, {"error": "not found"})
 
     return Handler
 

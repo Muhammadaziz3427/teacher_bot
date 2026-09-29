@@ -26,5 +26,8 @@ jobs:
       - name: Unit tests (pytest)
         run: python -m pytest -q
 
+      - name: Dashboard page test (node)
+        run: node tests/miniapp_page.test.js
+
       - name: Offline pipeline self-test
         run: python scripts/selftest.py
