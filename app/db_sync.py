@@ -60,6 +60,20 @@ def _url(path: Optional[str] = None) -> str:
                       path=path or settings.db_sync_path)
 
 
+def _hint(exc: urllib.error.HTTPError) -> str:
+    """Human explanation for the mistakes people actually make here."""
+    if exc.code in (401, 403):
+        return ("GitHub rejected the token — create a new fine-grained PAT with "
+                "'Contents: Read and write' on the data repository (also check "
+                "that it has not expired)")
+    if exc.code == 404:
+        return (f"'{settings.db_sync_repo}' or the file was not found — check the "
+                "'owner/repo' spelling and that the token can see that repository")
+    if exc.code == 422:
+        return "GitHub refused the update (stale version) — retrying once"
+    return ""
+
+
 def _request(method: str, url: str, payload: Optional[dict[str, Any]] = None,
              raw_json: bool = False) -> Any:
     data = None
@@ -74,8 +88,14 @@ def _request(method: str, url: str, payload: Optional[dict[str, Any]] = None,
                 else json.dumps(payload, ensure_ascii=False).encode("utf-8"))
         headers["Content-Type"] = "application/json"
     request = urllib.request.Request(url, data=data, method=method, headers=headers)
-    with urllib.request.urlopen(request, timeout=60) as response:
-        return json.load(response)
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as exc:
+        note = _hint(exc)
+        if note:
+            log.warning("DB sync: %s (HTTP %s)", note, exc.code)
+        raise
 
 
 def snapshot_zip() -> bytes:
@@ -182,8 +202,9 @@ async def pull_async() -> bool:
     return await asyncio.to_thread(pull)
 
 
-def status() -> dict[str, Any]:
-    return {
+def status(live: bool = False) -> dict[str, Any]:
+    """Configuration + (optionally) a live read of the remote file."""
+    info: dict[str, Any] = {
         "configured": configured(),
         "repo": settings.db_sync_repo,
         "branch": settings.db_sync_branch,
@@ -193,6 +214,22 @@ def status() -> dict[str, Any]:
         "local_exists": settings.db_path.exists(),
         "last_pushed_sha": _LAST_REMOTE_SHA,
     }
+    if live and configured():
+        try:
+            data = _request("GET", _url()) or {}
+            info["remote"] = {"reachable": True, "sha": data.get("sha"),
+                              "size": data.get("size")}
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                info["remote"] = {"reachable": True,
+                                  "file": "not uploaded yet (will be created)"}
+            else:
+                info["remote"] = {"reachable": False,
+                                  "error": f"HTTP {exc.code} — {_hint(exc)}"}
+        except Exception as exc:
+            info["remote"] = {"reachable": False,
+                              "error": f"{type(exc).__name__}: {exc}"}
+    return info
 
 
 def _main(argv: list[str]) -> int:
@@ -203,7 +240,8 @@ def _main(argv: list[str]) -> int:
         return 1
     command = (argv[1] if len(argv) > 1 else "status").lower()
     if command == "status":
-        print(json.dumps(status(), indent=2))
+        # live check: proves the repo + token actually work, before you rely on it
+        print(json.dumps(status(live=True), indent=2, ensure_ascii=False))
         return 0
     if command == "pull":
         changed = pull()

@@ -28,6 +28,24 @@ def test_status_reports_the_local_database():
     assert info["local_db"].endswith("pytest.db")
 
 
+def test_error_hints_explain_common_mistakes():
+    """Worst-case debugging help: the log must name the actual fix."""
+    import urllib.error
+
+    def err(code):
+        return urllib.error.HTTPError("url", code, "msg", {}, None)  # type: ignore[arg-type]
+
+    assert "Contents" in db_sync._hint(err(401))
+    assert "Contents" in db_sync._hint(err(403))
+    assert "owner/repo" in db_sync._hint(err(404))
+    assert db_sync._hint(err(500)) == ""
+
+
+def test_live_status_stays_offline_when_not_configured():
+    info = db_sync.status(live=True)
+    assert "remote" not in info          # no token → no network call
+
+
 def test_snapshot_is_a_zipped_sqlite_database():
     database = settings.db_path
     if not database.exists():                    # runs before the DB tests
