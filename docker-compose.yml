@@ -1,0 +1,22 @@
+# 24/7 ishlash uchun: docker compose up -d
+# Ma'lumotlar ./data va loglar ./logs da qoladi — konteyner qayta
+# ishga tushsa ham hech narsa yo'qolmaydi.
+services:
+  teacher-bot:
+    build: .
+    image: teacher-bot:latest
+    container_name: teacher-bot
+    restart: unless-stopped          # server o'chib yonsa ham o'zi qayta ko'tariladi
+    env_file: .env                   # BOT_TOKEN, OPENAI_API_KEY, ADMIN_IDS …
+    environment:
+      DB_FILE: data/teacher_bot.db
+      EXPORTS_DIR: data/exports
+      TZ: Asia/Tashkent
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"               # disk to'lib qolmasin
+        max-file: "3"

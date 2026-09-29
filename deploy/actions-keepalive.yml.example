@@ -1,0 +1,45 @@
+# ⚠️ TAJRIBALI variant — GitHub Actions'da botni "tirik" tutish.
+#
+# Nega bu tavsiya ETILMAYDI:
+#   * ish 6 soatdan ko'p bo'lmaydi → har 6 soatda qayta ishga tushadi va
+#     o'rtada 5-15 daqiqalik uzilishlar bo'ladi (cron kechikadi);
+#   * GitHub runner'da disk saqlanmaydi → data/teacher_bot.db HAR RUN'da
+#     yo'qoladi: ballar, davomat, hisobotlar, vazifalar — hammasi o'chadi;
+#   * 60 kun repo'ga push qilmasangiz GitHub cron'ni o'zi o'chirib qo'yadi.
+#
+# Shuning uchun 24/7 uchun bepul VM (Oracle Cloud Always Free) yoki uy
+# kompyuteri ishlatiladi — qarang: deploy/README.md
+#
+# Ishlatmoqchi bo'lsangiz: faylni .github/workflows/keepalive.yml ga
+# ko'chirib, BOT_TOKEN va boshqa sozlamalarni GitHub Secrets'ga qo'shing.
+name: Keepalive (experimental)
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"     # har 6 soatda
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355      # 5 soat 55 daqiqa (max 6 soat)
+    env:
+      PYTHONUTF8: "1"
+      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      AI_MODEL: openai/gpt-4o-mini
+      AI_VISION_MODEL: openai/gpt-4o-mini
+      ADMIN_IDS: ${{ secrets.ADMIN_IDS }}
+      TEACHER_IDS: ${{ secrets.TEACHER_IDS }}
+      TZ: Asia/Tashkent
+      DB_FILE: data/teacher_bot.db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Run the bot for one window
+        run: |
+          timeout 20700 python run.py || true

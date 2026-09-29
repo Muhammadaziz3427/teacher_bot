@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Class dashboard</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #17212b);
+    --text: var(--tg-theme-text-color, #f5f5f5);
+    --hint: var(--tg-theme-hint-color, #9aa4b2);
+    --button: var(--tg-theme-button-color, #3d8bfd);
+    --card: rgba(255, 255, 255, .06);
+    --line: rgba(255, 255, 255, .12);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px 14px 32px;
+    font: 15px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+    -webkit-tap-highlight-color: transparent;
+  }
+  h1 { font-size: 19px; margin: 4px 0 2px; }
+  .sub { color: var(--hint); font-size: 13px; margin-bottom: 14px; }
+  .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .card, .panel { background: var(--card); border: 1px solid var(--line);
+                   border-radius: 14px; padding: 12px; }
+  .card b { display: block; font-size: 24px; line-height: 1.2; }
+  .card span { color: var(--hint); font-size: 12px; }
+  .panel { margin-top: 14px; }
+  .panel h2 { font-size: 14px; margin: 0 0 10px; color: var(--hint);
+              text-transform: uppercase; letter-spacing: .04em; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+  th { color: var(--hint); font-weight: 500; font-size: 12px; }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  .bar { height: 6px; border-radius: 4px; background: var(--line); overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--button); }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 20px;
+          background: var(--button); color: #fff; font-size: 12px; }
+  .empty { color: var(--hint); font-size: 13px; }
+  .err { color: #ff6b6b; }
+  footer { margin-top: 16px; color: var(--hint); font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<h1 id="title">Class dashboard</h1>
+<div class="sub" id="period">loading…</div>
+
+<div class="cards" id="cards"></div>
+
+<div class="panel">
+  <h2>Students this week</h2>
+  <table>
+    <thead><tr><th>#</th><th>Name</th><th class="num">Points</th><th class="num">Done</th><th class="num">Att.</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="5" class="empty">loading…</td></tr></tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>Active homework</h2>
+  <div id="hw"><div class="empty">loading…</div></div>
+</div>
+
+<footer id="foot">auto-refresh every 60 s</footer>
+
+<script>
+const qs = new URLSearchParams(location.search);
+const token = qs.get("token") || "";
+const chat = qs.get("chat") || "";
+const $ = (id) => document.getElementById(id);
+const tg = window.Telegram?.WebApp;
+if (tg?.ready) tg.ready();
+if (tg?.expand) tg.expand();
+
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
+  (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const bar = (value) => `<div class="bar"><i style="width:${Math.max(0, Math.min(100, value))}%"></i></div>`;
+
+async function load() {
+  try {
+    const res = await fetch(`/api/summary?chat=${encodeURIComponent(chat)}&token=${encodeURIComponent(token)}`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    render(await res.json());
+  } catch (e) {
+    $("rows").innerHTML = `<tr><td colspan="5" class="err">Could not load data: ${esc(e.message)}</td></tr>`;
+    $("hw").innerHTML = "";
+    $("cards").innerHTML = "";
+  }
+}
+
+function render(d) {
+  $("title").textContent = d.group?.title || "Class dashboard";
+  document.title = $("title").textContent;
+  $("period").textContent = `${d.period.start} → ${d.period.end}`;
+
+  const t = d.totals || {};
+  $("cards").innerHTML = [
+    [t.students ?? 0, "students"],
+    [t.active_homeworks ?? 0, "active homework"],
+    [t.submitted ?? 0, "submissions"],
+    [t.avg_score ?? 0, "average score"],
+  ].map(([v, k]) => `<div class="card"><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join("");
+
+  const max = Math.max(1, ...(d.students || []).map((s) => Math.abs(s.points)));
+  $("rows").innerHTML = (d.students || []).length
+    ? d.students.map((s, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${esc(s.name)}<div style="margin-top:4px">${bar((Math.abs(s.points) / max) * 100)}</div></td>
+          <td class="num">${esc(s.points)}</td>
+          <td class="num">${esc(s.submitted)}</td>
+          <td class="num">${s.attendance === null ? "—" : esc(s.attendance) + "%"}</td>
+        </tr>`).join("")
+    : `<tr><td colspan="5" class="empty">No students yet.</td></tr>`;
+
+  $("hw").innerHTML = (d.active_homeworks || []).length
+    ? d.active_homeworks.map((h) => `
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0">
+          <span>#${esc(h.id)} ${esc(h.title)}</span>
+          <span class="pill">${esc(h.due)}</span>
+        </div>`).join("")
+    : `<div class="empty">No active homework.</div>`;
+}
+
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>

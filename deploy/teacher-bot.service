@@ -1,0 +1,23 @@
+[Unit]
+Description=Teacher Bot — Telegram ingliz tili vazifalari boti
+Documentation=https://github.com/Muhammadaziz3427/teacher_bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# O'zingizning foydalanuvchingizni yozing (masalan ubuntu)
+User=ubuntu
+WorkingDirectory=/opt/teacher_bot
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/teacher_bot/.venv/bin/python run.py
+
+# Har qanday sabab bilan to'xtasa — 10 soniyadan keyin qayta ko'tariladi
+Restart=always
+RestartSec=10
+# Ketma-ket 5 marta 60 soniya ichida yiqilsa, tizim uni "buzilgan" deb belgilaydi
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target
