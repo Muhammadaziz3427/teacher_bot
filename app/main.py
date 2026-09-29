@@ -49,18 +49,24 @@ async def run() -> None:
             "Copy .env.example to .env and put your @BotFather token in it."
         )
     # Ephemeral disk (Render free): restore the database from GitHub first.
-    # If it cannot be fetched we must NOT continue with an empty database —
-    # the first push would overwrite every student's record on the remote.
+    # "empty" (the repo has no copy yet) is a NORMAL first run, not an error;
+    # only an *unreachable* GitHub stops the boot, because starting empty
+    # could later overwrite real records on the remote.
     try:
-        if await db_sync.pull_async():
-            log.info("Database restored from %s", settings.db_sync_repo)
+        sync_state = await db_sync.pull_async()
     except Exception:
-        if not settings.db_path.exists():
-            raise SystemExit(
-                "DB sync pull failed and there is no local database — "
-                "refusing to start with an empty one."
-            )
-        log.exception("DB sync pull failed; using the local database")
+        log.exception("DB sync pull crashed")
+        sync_state = db_sync.PULL_ERROR
+
+    if sync_state == db_sync.PULL_RESTORED:
+        log.info("Database restored from %s", settings.db_sync_repo)
+    elif sync_state in (db_sync.PULL_EMPTY, db_sync.PULL_OFF, db_sync.PULL_LOCAL):
+        log.info("DB sync: %s — continuing with the local database", sync_state)
+    elif not settings.db_path.exists():
+        raise SystemExit(
+            "DB sync could not reach GitHub and there is no local database — "
+            "refusing to start with an empty one (the host will retry)."
+        )
 
     await init_db()
     bot = build_bot()

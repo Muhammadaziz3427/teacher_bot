@@ -15,3 +15,8 @@ logs/
 *.log.[0-9]
 .idea/
 .vscode/
+
+# scratch files used while debugging (never commit these)
+_*.py
+_*.js
+_*.txt

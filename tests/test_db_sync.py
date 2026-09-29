@@ -16,9 +16,22 @@ def test_not_configured_by_default():
 
 
 def test_pull_and_push_are_safe_noops_without_configuration():
-    assert db_sync.pull() is False
+    assert db_sync.pull() == db_sync.PULL_OFF
     assert db_sync.push() is False
     assert db_sync.push(force=True) is False     # never touches the network
+
+
+def test_a_missing_remote_file_is_a_first_run_not_an_error():
+    """Render free starts with an empty data repo — that must not block boot."""
+    assert db_sync._classify_pull_error(404) == db_sync.PULL_EMPTY
+    for code in (401, 403, 500, 502):
+        assert db_sync._classify_pull_error(code) == db_sync.PULL_ERROR
+
+
+def test_pull_states_are_distinct():
+    states = {db_sync.PULL_OFF, db_sync.PULL_LOCAL, db_sync.PULL_RESTORED,
+              db_sync.PULL_EMPTY, db_sync.PULL_ERROR}
+    assert len(states) == 5
 
 
 def test_status_reports_the_local_database():

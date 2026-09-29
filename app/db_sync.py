@@ -45,6 +45,13 @@ API = "https://api.github.com/repos/{repo}/contents/{path}"
 _LAST_FINGERPRINT: Optional[tuple[int, int]] = None
 _LAST_REMOTE_SHA: Optional[str] = None
 
+#: possible results of :func:`pull`
+PULL_OFF = "off"            # DB_SYNC_* is not configured
+PULL_LOCAL = "local"        # a local database exists — nothing to do
+PULL_RESTORED = "restored"  # downloaded from GitHub
+PULL_EMPTY = "empty"        # the repo has no copy yet (very first run)
+PULL_ERROR = "error"        # GitHub could not be asked (network/token)
+
 
 def configured() -> bool:
     return settings.db_sync_ready
@@ -55,9 +62,20 @@ def _fingerprint(path: Path) -> tuple[int, int]:
     return stat.st_mtime_ns, stat.st_size
 
 
-def _url(path: Optional[str] = None) -> str:
-    return API.format(repo=settings.db_sync_repo,
-                      path=path or settings.db_sync_path)
+def _url(path: Optional[str] = None, ref: bool = False) -> str:
+    url = API.format(repo=settings.db_sync_repo,
+                     path=path or settings.db_sync_path)
+    return f"{url}?ref={settings.db_sync_branch}" if ref else url
+
+
+def _classify_pull_error(code: int) -> str:
+    """A missing file is NOT a failure — it just means "first run".
+
+    404 is returned both for an empty repository and for a repository this
+    token cannot see; in both cases the remote has nothing we could
+    overwrite, so starting with an empty database is safe.
+    """
+    return PULL_EMPTY if code == 404 else PULL_ERROR
 
 
 def _hint(exc: urllib.error.HTTPError) -> str:
@@ -131,20 +149,30 @@ def restore_zip(payload: bytes) -> Path:
     return database
 
 
-def pull() -> bool:
-    """Restore the database from GitHub when the local copy is missing."""
+def pull() -> str:
+    """Restore the database from GitHub — see the ``PULL_*`` constants."""
     global _LAST_REMOTE_SHA
-    if not configured() or settings.db_path.exists():
-        return False
-    info = _request("GET", _url())
+    if not configured():
+        return PULL_OFF
+    if settings.db_path.exists():
+        return PULL_LOCAL
+    try:
+        info = _request("GET", _url(ref=True)) or {}
+    except urllib.error.HTTPError as exc:
+        return _classify_pull_error(exc.code)
+    except Exception as exc:
+        log.warning("DB sync: GitHub is unreachable (%s: %s)",
+                    type(exc).__name__, exc)
+        return PULL_ERROR
+
     content = info.get("content") or ""
     if not content:
-        log.warning("DB sync: remote file has no content")
-        return False
+        log.warning("DB sync: the remote file has no readable content")
+        return PULL_ERROR
     restore_zip(base64.b64decode(content))
     _LAST_REMOTE_SHA = info.get("sha")
     log.info("DB sync: database restored from %s", settings.db_sync_repo)
-    return True
+    return PULL_RESTORED
 
 
 def push(force: bool = False) -> bool:
@@ -159,7 +187,7 @@ def push(force: bool = False) -> bool:
 
     sha: Optional[str] = _LAST_REMOTE_SHA
     try:
-        sha = (_request("GET", _url()) or {}).get("sha") or sha
+        sha = (_request("GET", _url(ref=True)) or {}).get("sha") or sha
     except urllib.error.HTTPError as exc:
         if exc.code != 404:
             raise
@@ -176,7 +204,7 @@ def push(force: bool = False) -> bool:
     except urllib.error.HTTPError as exc:
         if exc.code not in {409, 422}:       # stale sha → one refresh attempt
             raise
-        sha = (_request("GET", _url()) or {}).get("sha")
+        sha = (_request("GET", _url(ref=True)) or {}).get("sha")
         if not sha:
             return False
         body["sha"] = sha
@@ -196,7 +224,7 @@ async def push_async(force: bool = False) -> bool:
     return await asyncio.to_thread(push, force)
 
 
-async def pull_async() -> bool:
+async def pull_async() -> str:
     import asyncio
 
     return await asyncio.to_thread(pull)
@@ -216,7 +244,7 @@ def status(live: bool = False) -> dict[str, Any]:
     }
     if live and configured():
         try:
-            data = _request("GET", _url()) or {}
+            data = _request("GET", _url(ref=True)) or {}
             info["remote"] = {"reachable": True, "sha": data.get("sha"),
                               "size": data.get("size")}
         except urllib.error.HTTPError as exc:
@@ -244,9 +272,13 @@ def _main(argv: list[str]) -> int:
         print(json.dumps(status(live=True), indent=2, ensure_ascii=False))
         return 0
     if command == "pull":
-        changed = pull()
-        print("restored" if changed else "skipped (local database exists)")
-        return 0
+        state = pull()
+        print({"off": "DB_SYNC_* is not configured",
+               "local": "skipped — a local database already exists",
+               "restored": "restored from GitHub",
+               "empty": "nothing to restore yet (the repo has no copy)",
+               "error": "could not reach GitHub — see the warning above"}.get(state, state))
+        return 0 if state != PULL_ERROR else 1
     if command == "push":
         changed = push(force="--force" in argv)
         print("pushed" if changed else "skipped (no changes)")
